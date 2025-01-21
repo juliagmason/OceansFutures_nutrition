@@ -63,7 +63,16 @@ spp_list <- read_csv("Data/dbem_spp_list.csv") %>%
     
     
     TRUE ~ taxon_name
-  )
+  ),
+  # create taxa column to use with edible conversion values. in the dataset, taxon ID is all fish up to 657506. then alphabetical by common name?! for inverts. 
+  # https://stackoverflow.com/questions/7597559/grep-using-a-character-vector-with-multiple-patterns 
+  taxa = case_when (
+    taxon_key < 660000 ~ "Finfish", 
+    grepl ("shrimp|crab|lobster|krill|prawn|seabob|mantis|Crayfish", common_name) ~ "Crustacean", 
+    grepl ("clam|oyster|mussel|scallop|whelk|Whelk|cockle|periwinkle|abalone|quahog|ark|shell|venus|gaper|tivela|semele|callista|pitar", common_name) ~ "Mollusc", 
+    grepl ("squid|cuttlefish|octopus", common_name) ~ "Cephalopod", 
+    TRUE ~ "Other" #should just be sea urchins
+    )
   )
 
 # fish nutrients models, ran code from https://github.com/mamacneil/NutrientFishbase
@@ -86,7 +95,7 @@ spp_nutr_fish <- fishnutr %>%
 missing_nutr <- spp_list %>% 
   filter (!nutr_name %in% spp_nutr_fish$species) 
 
-View (missing_nutr)
+#View (missing_nutr)
 # ~ 28 fish and elasmos
 # Elasmorhinus brucus--has E. cookei
 # Carcharodon carcharias--this can't be contributing that much to nutrition...!?
@@ -133,7 +142,17 @@ d_gigas_nutr <- data.frame (
 
 # stitch together
 
-dbem_spp_nutr <- rbind (spp_nutr_fish, spp_nutr_invert, d_gigas_nutr)
+# make little dataframe of species name and taxa to add back in
+taxa_key <- spp_list %>%
+  select (nutr_name, taxa) %>%
+  rename (species = nutr_name)
+
+dbem_spp_nutr <- rbind (spp_nutr_fish, spp_nutr_invert, d_gigas_nutr) %>%
+  # add back taxa column
+  left_join (taxa_key, by = "species") %>%
+  replace_na(list(taxa = "Other"))
+
+# add Taxa column to use with edible conversion factors 
 saveRDS (dbem_spp_nutr, file = "Data/dbem_spp_nutr_content.Rds")
 
 ##########################
