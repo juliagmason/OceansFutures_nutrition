@@ -28,7 +28,9 @@ spp_key <- read_csv("Data/dbem_spp_list.csv",
   select (taxon_key, taxon_name, common_name)
 
 full_df <- full_df %>%
-  left_join (spp_key, by = "taxon_key")
+  left_join (spp_key, by = "taxon_key") %>%
+  # rename species name to "species" to match nutrition data
+  rename (species = taxon_name)
 
 
 write.csv (full_df, file = "Data/mcp_full.csv", row.names = FALSE)
