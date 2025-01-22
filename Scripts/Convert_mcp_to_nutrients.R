@@ -34,17 +34,33 @@ calc_children_fed_func <- function (species_name, amount_mt) {
               taxa == "Other" ~ 1),
             # convert tons per year to 100g /day, proportion edible
             edible_servings = catch_mt * p_edible * 1000 * 1000 /100 / 365,
-            nutrient_servings = edible_servings * amount) %>%
+            nutrient_servings = edible_servings * amount,
+            # also calculate nutrient yield in tons
+            scalar = case_when (
+              nutrient %in% c("Protein", "Omega_3") ~ 1,
+              nutrient %in% c("Calcium", "Zinc", "Iron") ~ 1/1000,
+              nutrient %in% c("Vitamin_A", "Selenium") ~ 1/1e6
+            ),
+            # input (catch_mt) is in metric tons. amount is in units / 100g. so divide by 100 to account for serving size, and multiply by scalar to cancel out g
+            nutr_tonnes = catch_mt * p_edible * amount * scalar / 100 
+            ) %>%
     left_join (rni_child, by = "nutrient") %>%
     mutate (rni_equivalents = nutrient_servings / RNI) %>%
-    select (nutrient, rni_equivalents)
+    select (nutrient, rni_equivalents, nutr_tonnes)
   
   
 }
 
-# check on small version of mcp data
-mcp_sm <- sample_n(mcp, 100)
+# # check on small version of mcp data
+# mcp_sm <- sample_n(mcp, 100)
+# 
+# mcp_sm_rnis <- mcp_sm %>%
+#   mutate (rni_equivalents = map2 (species, mean_mcp, calc_children_fed_func)) %>%
+#             unnest(cols = c(rni_equivalents),  names_repair = "check_unique") 
 
-mcp_sm_rnis <- mcp_sm %>%
+# Convert mcp to nutrients ----
+mcp_nutr <- mcp %>% 
   mutate (rni_equivalents = map2 (species, mean_mcp, calc_children_fed_func)) %>%
-            unnest(cols = c(rni_equivalents),  names_repair = "check_unique") 
+  unnest(cols = c(rni_equivalents),  names_repair = "check_unique") 
+
+saveRDS(mcp_nutr, file = "Data/mcp_nutrients.Rds")
