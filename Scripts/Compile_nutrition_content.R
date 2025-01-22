@@ -117,7 +117,7 @@ dbem_spp_afcd_nutr <-  species_nutrients (missing_nutr$nutr_name,
     nutrient = case_when (
       nutrient == "DHA_EPA" ~ "Omega_3",
       nutrient == "Iron, total" ~ "Iron",
-      nutrient == "Vitami_a_combined" ~ "Vitamin_A",
+      nutrient == "Vitamin_a_combined" ~ "Vitamin_A",
       nutrient == "Protein_total_combined" ~ "Protein",
       TRUE ~ nutrient
     )
