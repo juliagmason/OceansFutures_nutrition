@@ -46,6 +46,14 @@ t <- mcp_nutr_delta %>%
   pivot_wider (names_from = nutrient, values_from = delta_nutr_perc) %>%
   arrange (Protein)
 
+# function for copying R output tables into word/excel----
+#https://stackoverflow.com/questions/24704344/copy-an-r-data-frame-to-an-excel-spreadsheet
+write.excel <- function(x,row.names=FALSE,col.names=TRUE,...) {
+  write.table(x,"clipboard",sep="\t",row.names=row.names,col.names=col.names,...)
+}
+
+
+t %>% write.excel()
 
 # scatterplot with nutrition loss and nutrition dependence ----
 
@@ -94,8 +102,8 @@ library (ggrepel)
 mcp_nutr_delta %>%
   left_join (eez_match, by = "eez_name") %>%
   left_join (nutr_dep, by = "selig_name") %>%
-  #filter (nutrient == "Protein") %>%
-  ggplot (aes (y = 100* delta_nutr_perc, x = nutr_dependence, col = nutrient)) +
+  filter (nutrient == "Protein") %>%
+  ggplot (aes (y = 100* delta_nutr_perc, x = nutr_dependence)) + #, col = nutrient)) +
   geom_point () +
   geom_text_repel(data = . %>% 
                     filter (nutrient == "Protein") %>%
@@ -110,4 +118,8 @@ mcp_nutr_delta %>%
   theme_bw () +
   geom_hline (yintercept = 0, lty = 2) +
   labs (y = "Projected % change in nutrition yield",  x= "Nutritional dependence on seafood")
-  
+
+
+ggsave(file = "Figures/Nutr_delta_nutr_dependence.png", width = 6, height = 4, units = "in", dpi = 300)
+
+
