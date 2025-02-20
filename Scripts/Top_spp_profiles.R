@@ -4,6 +4,12 @@
 # Nutrient content profiles for top 5 species in Ecuador and Indonesia
 library (tidyverse)
 
+# function for copying R output tables into word/excel----
+#https://stackoverflow.com/questions/24704344/copy-an-r-data-frame-to-an-excel-spreadsheet
+write.excel <- function(x,row.names=FALSE,col.names=TRUE,...) {
+  write.table(x,"clipboard",sep="\t",row.names=row.names,col.names=col.names,...)
+}
+
 # species nutrient content, from Compile_nutrition_content.R
 spp_nutr <- readRDS("Data/dbem_spp_nutr_content.Rds")
 
@@ -66,21 +72,21 @@ plot_colorful_spp_nutr_dodge_bar <- function (species_names, Selenium = FALSE) {
 # r data frame of nutrient yield and rni equivalents for each species, eez, time period
 mcp_nutr <- readRDS("Data/mcp_nutrients.Rds")
 
-#top 5 mcp species for ecuador
-ecu_5spp <- mcp_nutr %>%
-  ungroup() %>%
-  filter (eez_name == "Ecuador", period == "present_1995_2014", ssp == "ssp126", nutrient == "Protein") %>%
-
-  select (mean_mcp, species) %>%
-  top_n (wt = mean_mcp, n = 5)
-# tons of species have identical mcp??
-
-indo_5spp <- mcp_nutr %>%
-  ungroup() %>%
-  filter (eez_name %in% c("Indonesia (Eastern)", "Indonesia (Central)"), period == "present_1995_2014", ssp == "ssp126", nutrient == "Protein") %>%
-  
-  select (mean_mcp, species) %>%
-  top_n (wt = mean_mcp, n = 3)
+# #top 5 mcp species for ecuador
+# ecu_5spp <- mcp_nutr %>%
+#   ungroup() %>%
+#   filter (eez_name == "Ecuador", period == "present_1995_2014", ssp == "ssp126", nutrient == "Protein") %>%
+# 
+#   select (mean_mcp, species) %>%
+#   top_n (wt = mean_mcp, n = 5)
+# # tons of species have identical mcp??
+# 
+# indo_5spp <- mcp_nutr %>%
+#   ungroup() %>%
+#   filter (eez_name %in% c("Indonesia (Eastern)", "Indonesia (Central)"), period == "present_1995_2014", ssp == "ssp126", nutrient == "Protein") %>%
+#   
+#   select (mean_mcp, species) %>%
+#   top_n (wt = mean_mcp, n = 3)
 
 # use SAU data instead
 # WWF used FA capture quantity...very slow: https://www.fao.org/fishery/statistics-query/en/capture/capture_quantity
@@ -119,16 +125,28 @@ plot_colorful_spp_nutr_dodge_bar(indo_5spp$scientific_name, Selenium = TRUE) +
 ggsave ("Figures/Indonesia_top5_bar_nutr.png", width = 7, height = 4, units = "in")
 
 # Ecuador ----
-# galapagos and mainland from SAU
+
+# From WWF team:
+ecu_spp <- c("Katsuwonus pelamis", "Opisthonema libertate", "Selene peruviana", "Chloroscombrus orqueta", "Prionace glauca", "Mustelus lunulatus")
+# M. lunulatus has no nutrition or MCP data. S. peruviana has nutr data but not MCP, so have to re-fetch
+
+# # galapagos and mainland from SAU
 ecu1 <- read_csv("Data/SAU_landings/SAU EEZ 218 v50-1.csv")
 ecu2 <- read_csv ("Data/SAU_landings/SAU EEZ 219 v50-1.csv")
 
-ecu_5spp <- ecu1 %>%
-  rbind (ecu2) %>%
-  filter (year >= 2015) %>%
-  group_by (scientific_name) %>%
-  summarize (tot = sum (tonnes)) %>%
-  slice_max (tot, n = 7)
+ecu_5spp <-  ecu1 %>%
+    rbind (ecu2) %>%
+    filter (year >= 2015, scientific_name %in% ecu_spp) %>%
+    group_by (scientific_name) %>%
+    summarize (tot = sum (tonnes))
+# 
+# ecu_5spp <- ecu1 %>%
+#   rbind (ecu2) %>%
+#   filter (year >= 2015) %>%
+#   group_by (scientific_name) %>%
+#   summarize (tot = sum (tonnes)) %>%
+#   slice_max (tot, n = 7)
+
 
 # check that these are consistent with dbem
 mcp_ecu <- mcp_nutr %>% filter (eez_name == "Ecuador") # no galapagos?
@@ -192,7 +210,7 @@ ecu_sau_mean_catch <- ecu1 %>%
   rbind (ecu2) %>%
   filter (year >= 2015) %>%
   group_by (scientific_name) %>%
-  summarize (mean_catch_sau = mean (tonnes)) %>%
+  summarize (mean_catch_sau = mean (tonnes, na.rm = TRUE)) %>%
   rename (species = scientific_name)
 
 ecu5_sau_perc_change <- ecu5_perc_change %>%
@@ -249,7 +267,9 @@ calc_children_fed_func <- function (species_name, amount_mt) {
   
 }
 
+# ecuador--use landings not MCP to preserve S. peruviana
 ecu_5spp_rnis <- ecu5_sau_perc_change %>% 
+  filter (species %in% ecu_5spp$scientific_name) %>%
   mutate (rni_equivalents = map2 (species, mean_catch_sau, calc_children_fed_func)) %>%
   unnest(cols = c(rni_equivalents),  names_repair = "check_unique") 
 
@@ -273,7 +293,11 @@ indo_5spp_rnis %>%
          plot.title = element_text (size = 13))
 ggsave ("Figures/Indonesia_top5_nutr_yield.png", width = 7, height = 4, units = "in")
 
-ecu_5spp_rnis %>%
+# ecuador--use landings not MCP to preserve S. peruviana
+ecu_sau_mean_catch %>% 
+  filter (species %in% ecu_5spp$scientific_name) %>%
+  mutate (rni_equivalents = map2 (species, mean_catch_sau, calc_children_fed_func)) %>%
+  unnest(cols = c(rni_equivalents),  names_repair = "check_unique") %>%
   ggplot (aes (x = nutrient, y = rni_equivalents/1000000, fill = species)) +
   geom_col () +
   theme_bw() +
@@ -345,7 +369,8 @@ indo_5spp_rnis %>%
 ggsave ("Figures/Indonesia_top5_RNIs_projections.png", width = 7, height = 4, units = "in")
 
 # set order of species to match dodged bar nutrient density
-ecu_spp_order <- c("C. mysticetus", "T. albacares", "K. pelamis", "O. libertate", "S. japonicus")
+ecu_spp_order <- c("C. orqueta", "K. pelamis", "O. libertate", "P. glauca")
+#ecu_spp_order <- c("C. mysticetus", "T. albacares", "K. pelamis", "O. libertate", "S. japonicus")
 
 ecu_tot_rnis_perc_change <- ecu_5spp_rnis %>%
   group_by (species) %>%
