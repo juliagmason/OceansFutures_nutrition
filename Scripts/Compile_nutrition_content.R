@@ -88,8 +88,9 @@ fishnutr <- read_csv ("Data/Species_Nutrient_Predictions.csv") %>%
   mutate (nutrient = str_sub(nutrient, end = -4))
 
 # grab dbem fish species
+# also need Selene peruviana for ecuador case
 spp_nutr_fish <- fishnutr %>%
-  filter (species %in% spp_list$nutr_name)
+  filter (species %in% spp_list$nutr_name | species == "Selene peruviana")
 
 # look at missing--are there any fish?
 missing_nutr <- spp_list %>% 
