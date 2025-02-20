@@ -57,40 +57,49 @@ t %>% write.excel()
 
 # scatterplot with nutrition loss and nutrition dependence ----
 
-# Selig et al. 2018 SI; Ocean Futures might have used separate protein FAO balance?
-nutr_dep <- read_csv ("Data/Selig_SI_ocean_dependence_rankings.csv") %>%
-  select (Country, `Nutritional dependence`) %>%
-  rename (selig_name = Country,
-          nutr_dependence = `Nutritional dependence`) 
+# # Selig et al. 2018 SI; Ocean Futures might have used separate protein FAO balance?
+# nutr_dep <- read_csv ("Data/Selig_SI_ocean_dependence_rankings.csv") %>%
+#   select (Country, `Nutritional dependence`) %>%
+#   rename (selig_name = Country,
+#           nutr_dependence = `Nutritional dependence`) 
+
+# Use FAO data from WWF to be consistent
+nutr_dep <- read_csv("Data/food_security_seafood_dependence_FAOBalance.csv")%>%
+  # colnames are really messed up, really only need Area and Dependence
+  select (Area, Dependence) %>%
+  rename (selig_name = Area)
 
 # check different naming conventions
-sort(unique(mcp_nutr_delta$eez_name[which (!mcp_nutr_delta$eez_name %in% nutr_dep$selig_name)]))
+sort(unique(mcp_nutr_delta$eez_name[which (!mcp_nutr_delta$eez_name %in% nutr_dep$Area)]))
+#sort(unique(mcp_nutr_delta$eez_name[which (!mcp_nutr_delta$eez_name %in% nutr_dep$selig_name)]))
 
 # because dbem has multiple EEZs per country, make a matching df?
+# FAO names seem to match SElig
+
 eez_match <- tibble (
   eez_name = sort (unique (mcp_nutr_delta$eez_name)),
   selig_name = case_when (
     grepl ("Canada", eez_name) ~ "Canada",
     grepl ("France", eez_name) ~ "France",
-    grepl ("Greece", eez_name) ~ "Greece", 
-    grepl ("Egypt", eez_name) ~ "Egypt", 
-    grepl ("Guatemala", eez_name) ~ "Guatemala", 
+    grepl ("Greece", eez_name) ~ "Greece",
+    grepl ("Egypt", eez_name) ~ "Egypt",
+    grepl ("Guatemala", eez_name) ~ "Guatemala",
     grepl ("Honduras", eez_name) ~ "Honduras",
-    grepl ("Indonesia", eez_name) ~ "Indonesia", 
+    grepl ("Indonesia", eez_name) ~ "Indonesia",
     grepl ("Kiribati", eez_name) ~ "Kiribati",
     grepl ("Mexico", eez_name) ~ "Mexico",
     grepl ("New Zealand", eez_name) ~ "New Zealand",
     grepl ("Russia", eez_name) ~ "Russia",
-    grepl ("Norway", eez_name) ~ "Norway", 
+    grepl ("Norway", eez_name) ~ "Norway",
     eez_name == "Congo (ex-Zaire)" ~ "Congo",
-    eez_name == "Congo, R. of" ~ "Democratic Republic of Congo", 
-    eez_name == "Gambia" ~ "Gambia, The", 
+    eez_name == "Congo, R. of" ~ "Democratic Republic of Congo",
+    eez_name == "Gambia" ~ "Gambia, The",
     eez_name == "Korea (South)" ~ "South Korea",
-    eez_name == "Marshall Isl." ~ "Marshall Islands", 
+    eez_name == "Marshall Isl." ~ "Marshall Islands",
     eez_name == "Micronesia (Federated States of)" ~ "Federated States of Micronesia",
-    eez_name == "Morocco (South)" ~ "Morocco", 
-    eez_name == "Sao Tome & Principe" ~ "Sao Tome and Principe", 
-    eez_name == "Solomon Isl." ~ "Solomon Islands", 
+    eez_name == "Morocco (South)" ~ "Morocco",
+    eez_name == "Sao Tome & Principe" ~ "Sao Tome and Principe",
+    eez_name == "Solomon Isl." ~ "Solomon Islands",
     eez_name == "Turkey (Mediterranean Sea)" ~ "Turkey",
     eez_name == "Viet Nam" ~ "Vietnam",
     TRUE ~ eez_name
@@ -103,11 +112,13 @@ mcp_nutr_delta %>%
   left_join (eez_match, by = "eez_name") %>%
   left_join (nutr_dep, by = "selig_name") %>%
   filter (nutrient == "Protein") %>%
-  ggplot (aes (y = 100* delta_nutr_perc, x = nutr_dependence)) + #, col = nutrient)) +
+  # make column to highlight case study countries ecuador and indo
+  mutate (case_study = ifelse (eez_name %in% c("Ecuador", "Indonesia (Central)", "Indonesia (Eastern)"), 1, 0)) %>%
+  ggplot (aes (y = 100* delta_nutr_perc, x = Dependence, col = case_study)) + #, col = nutrient)) +
   geom_point () +
   geom_text_repel(data = . %>% 
                     filter (nutrient == "Protein") %>%
-                    mutate(label = ifelse(abs(100* delta_nutr_perc) > 20 | nutr_dependence > 0.5,
+                    mutate(label = ifelse(abs(100* delta_nutr_perc) > 20 | Dependence > 0.5 | case_study == 1,
                                           eez_name, "")),
                   aes(label = label), 
                   box.padding = 0.5,
@@ -117,6 +128,13 @@ mcp_nutr_delta %>%
   facet_wrap (~ssp) +
   theme_bw () +
   geom_hline (yintercept = 0, lty = 2) +
+  theme (legend.position = "none", # for case study demarcationaxis.text.y = element_text (size = 11),
+         axis.text = element_text (size = 10),
+         axis.title = element_text (size = 12),
+         strip.text = element_text (size = 12),
+         plot.title = element_text (size = 13)
+         ) +
+  ggtitle ("Projected % change in protein vs. protein dependence") +
   labs (y = "Projected % change in nutrition yield",  x= "Nutritional dependence on seafood")
 
 
