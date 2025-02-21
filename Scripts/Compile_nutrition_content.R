@@ -92,6 +92,22 @@ fishnutr <- read_csv ("Data/Species_Nutrient_Predictions.csv") %>%
 spp_nutr_fish <- fishnutr %>%
   filter (species %in% spp_list$nutr_name | species == "Selene peruviana")
 
+# for ecuador case, take avg nutrition for Mustelus spp in ecuador
+# doing this post hoc with mcp_full, which would need to bring back in if running fresh
+ecu_mustelus <- mcp_full %>%
+  filter (eez_name =="Ecuador", grepl ("Mustelus", species)) %>% select (species) %>% unique()
+
+ecu_mustelus_nutr <- fishnutr %>%
+  filter (species %in% ecu_mustelus$species) %>% # does have all 4 from dbem
+  group_by (nutrient) %>%
+  summarise (amount = mean (amount, na.rm = TRUE)) %>% 
+  mutate (species = "Mustelus lunulatus") %>%
+  # reorder
+  select (species, nutrient, amount)
+  
+spp_nutr_fish <- spp_nutr_fish %>%
+  rbind (ecu_mustelus_nutr)
+
 # look at missing--are there any fish?
 missing_nutr <- spp_list %>% 
   filter (!nutr_name %in% spp_nutr_fish$species) 
@@ -123,6 +139,7 @@ dbem_spp_afcd_nutr <-  species_nutrients (missing_nutr$nutr_name,
       TRUE ~ nutrient
     )
           )
+
 
 # match to fishnutr format
 spp_nutr_invert <- dbem_spp_afcd_nutr %>%
