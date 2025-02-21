@@ -129,6 +129,7 @@ ggsave ("Figures/Indonesia_top5_bar_nutr.png", width = 7, height = 4, units = "i
 # From WWF team:
 ecu_spp <- c("Katsuwonus pelamis", "Opisthonema libertate", "Selene peruviana", "Chloroscombrus orqueta", "Prionace glauca", "Mustelus lunulatus")
 # M. lunulatus has no nutrition or MCP data. S. peruviana has nutr data but not MCP, so have to re-fetch
+# using average of other 4 Mustelus spp in DBEM Ecuador EEZ for M. lunulatus nutrition
 
 # # galapagos and mainland from SAU
 ecu1 <- read_csv("Data/SAU_landings/SAU EEZ 218 v50-1.csv")
@@ -152,8 +153,10 @@ ecu_5spp <-  ecu1 %>%
 mcp_ecu <- mcp_nutr %>% filter (eez_name == "Ecuador") # no galapagos?
 ecu_5spp$scientific_name[which (ecu_5spp$scientific_name %in% mcp_ecu$species)] # yes
 
+# M. lunulatus not in mcp, take other mustelus spp
+mcp_ecu %>% filter (grepl("Mustelus", species)) %>% select (species) %>% unique()
 
-plot_colorful_spp_nutr_dodge_bar(ecu_5spp$scientific_name, Selenium = TRUE) +
+plot_colorful_spp_nutr_dodge_bar(ecu_spp, Selenium = TRUE) +
   ggtitle ("Nutrient content of 100g portion for top species, Ecuador") +
   labs (y = "% Child RNI met")+
   scale_fill_brewer(palette = "Set1") +
@@ -167,6 +170,13 @@ plot_colorful_spp_nutr_dodge_bar(ecu_5spp$scientific_name, Selenium = TRUE) +
     plot.margin=unit(c(1,1,1,1), 'mm'))
 
 ggsave ("Figures/Ecuador_top5_bar_nutr.png", width = 7, height = 4, units = "in")
+
+# Table of RNi values
+spp_nutr %>%
+  filter (species %in% ecu_spp) %>% 
+  select (species, nutrient, perc_rni) %>%
+  pivot_wider (names_from = nutrient, values_from = perc_rni) %>%
+  write.excel()
 
 # What is the projection trajectory for these species? ----
 # read compiled csv, collated in compile_MCP_data.R
@@ -196,8 +206,13 @@ indo5_sau_perc_change <- indo5_perc_change %>%
   rename (perc_change_ssp126 = ssp126, perc_change_ssp585 = ssp585)
 
 # ecuador
+# for mustelus, take average of other mustelus spp
 mcp_ecu5 <- mcp_full %>%
-  filter (eez_name == "Ecuador", species %in% ecu_5spp$scientific_name)
+  filter (eez_name == "Ecuador", species %in% ecu_5spp$scientific_name | grepl ("Mustelus", species) | grepl ("Selene", species)) %>%
+  # give all Mustelus spp. same name to combine
+  mutate (species = ifelse (grepl ("Mustelus", species), "Mustelus spp.", species))
+
+
 
 ecu5_perc_change <- mcp_ecu5 %>%
   group_by (period, ssp, species) %>%
@@ -209,6 +224,8 @@ ecu5_perc_change <- mcp_ecu5 %>%
 ecu_sau_mean_catch <- ecu1 %>%
   rbind (ecu2) %>%
   filter (year >= 2015) %>%
+  # combine mustelus spp
+  mutate (scientific_name = ifelse (grepl ("Mustelus", scientific_name), "Mustelus spp.", scientific_name)) %>%
   group_by (scientific_name) %>%
   summarize (mean_catch_sau = mean (tonnes, na.rm = TRUE)) %>%
   rename (species = scientific_name)
@@ -218,7 +235,12 @@ ecu5_sau_perc_change <- ecu5_perc_change %>%
   select (species, mean_catch_sau, ssp, perc_change) %>%
   pivot_wider (names_from = ssp, values_from = perc_change) %>%
   arrange (desc (mean_catch_sau)) %>%
-  rename (perc_change_ssp126 = ssp126, perc_change_ssp585 = ssp585)
+  rename (perc_change_ssp126 = ssp126, perc_change_ssp585 = ssp585) %>%
+  # use S. peruviana catch
+  mutate (mean_catch_sau = ifelse(
+    species == "Selene dorsalis", ecu_sau_mean_catch$mean_catch_sau[which(ecu_sau_mean_catch$species == "Selene peruviana")],
+    mean_catch_sau)
+  )
 
 
 # calculate RNIs from SAU data, then show % change? ----
@@ -269,7 +291,8 @@ calc_children_fed_func <- function (species_name, amount_mt) {
 
 # ecuador--use landings not MCP to preserve S. peruviana
 ecu_5spp_rnis <- ecu5_sau_perc_change %>% 
-  filter (species %in% ecu_5spp$scientific_name) %>%
+  # nutr data has m. lunulatus
+  mutate (species = ifelse (species == "Mustelus spp.", "Mustelus lunulatus", species)) %>%
   mutate (rni_equivalents = map2 (species, mean_catch_sau, calc_children_fed_func)) %>%
   unnest(cols = c(rni_equivalents),  names_repair = "check_unique") 
 
@@ -295,13 +318,15 @@ ggsave ("Figures/Indonesia_top5_nutr_yield.png", width = 7, height = 4, units = 
 
 # ecuador--use landings not MCP to preserve S. peruviana
 ecu_sau_mean_catch %>% 
-  filter (species %in% ecu_5spp$scientific_name) %>%
+  # nutr data has M. lunulatus spelled out
+  mutate (species = ifelse (species == "Mustelus spp.", "Mustelus lunulatus", species)) %>%
+  filter (species %in% ecu_spp) %>%
   mutate (rni_equivalents = map2 (species, mean_catch_sau, calc_children_fed_func)) %>%
-  unnest(cols = c(rni_equivalents),  names_repair = "check_unique") %>%
+  unnest(cols = c(rni_equivalents),  names_repair = "check_unique") %>% #write.excel()
   ggplot (aes (x = nutrient, y = rni_equivalents/1000000, fill = species)) +
   geom_col () +
   theme_bw() +
-  ggtitle ("Nutrient yield, top 5 species, Ecuador") +
+  ggtitle ("Nutrient yield, key species, Ecuador") +
   labs (x = "", y = "Child RNI equivalents, millions", fill = "Species") +
   theme (axis.text.y = element_text (size = 11),
          axis.text.x = element_text (size = 9),
@@ -369,7 +394,7 @@ indo_5spp_rnis %>%
 ggsave ("Figures/Indonesia_top5_RNIs_projections.png", width = 7, height = 4, units = "in")
 
 # set order of species to match dodged bar nutrient density
-ecu_spp_order <- c("C. orqueta", "K. pelamis", "O. libertate", "P. glauca")
+ecu_spp_order <- c("C. orqueta", "K. pelamis", "O. libertate", "S. peruviana", "P. glauca", "M. lunulatus")
 #ecu_spp_order <- c("C. mysticetus", "T. albacares", "K. pelamis", "O. libertate", "S. japonicus")
 
 ecu_tot_rnis_perc_change <- ecu_5spp_rnis %>%
@@ -387,6 +412,12 @@ ecu_tot_rnis_perc_change <- ecu_5spp_rnis %>%
 
 
 ecu_5spp_rnis %>%
+  # rename S. dorsalis back to peruviana
+  mutate (
+    species = ifelse (
+      species == "Selene dorsalis", "Selene peruviana", species
+    )
+  ) %>%
   # shorten species names
   mutate (
   spp_short = ifelse (
@@ -403,7 +434,7 @@ ecu_5spp_rnis %>%
   # unify species order with micronutrient density
   scale_x_discrete (limits = ecu_spp_order) +
   scale_fill_brewer(palette = "Set1") +
-  ggtitle ("Potential nutrient provisioning, top 5 species, Ecuador") +
+  ggtitle ("Potential nutrient provisioning, top species, Ecuador") +
   theme (axis.text.y = element_text (size = 11),
          axis.text.x = element_text (size = 9),
          axis.title = element_text (size = 12),
