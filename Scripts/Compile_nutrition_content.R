@@ -88,9 +88,9 @@ fishnutr <- read_csv ("Data/Species_Nutrient_Predictions.csv") %>%
   mutate (nutrient = str_sub(nutrient, end = -4))
 
 # grab dbem fish species
-# also need Selene peruviana for ecuador case
+# also need Selene peruviana for ecuador case and Decapterus macarellus for indo case
 spp_nutr_fish <- fishnutr %>%
-  filter (species %in% spp_list$nutr_name | species == "Selene peruviana")
+  filter (species %in% spp_list$nutr_name | species == "Selene peruviana" |species == "Decapterus macarellus")
 
 # for ecuador case, take avg nutrition for Mustelus spp in ecuador
 # doing this post hoc with mcp_full, which would need to bring back in if running fresh
@@ -104,9 +104,20 @@ ecu_mustelus_nutr <- fishnutr %>%
   mutate (species = "Mustelus lunulatus") %>%
   # reorder
   select (species, nutrient, amount)
-  
+
+# for Indonesia case, add Decapterus macarellus and avg of Stolephorus. From early demonstration_cases work, looked up that all 8 Stolephorus spp in fishnutr occur in indonesia
+indo_stolephorus_nutr <- fishnutr %>%
+  filter (grepl ("Stolephorus", species)) %>%
+  mutate (species = "Stolephorus") %>%
+  group_by (species, nutrient) %>%
+  summarise (amount = mean(amount, na.rm = TRUE))
+
+
+
+# compile additional case study spp  
 spp_nutr_fish <- spp_nutr_fish %>%
-  rbind (ecu_mustelus_nutr)
+  rbind (ecu_mustelus_nutr) %>%
+  rbind (indo_stolephorus_nutr) 
 
 # look at missing--are there any fish?
 missing_nutr <- spp_list %>% 

@@ -96,20 +96,24 @@ mcp_nutr <- readRDS("Data/mcp_nutrients.Rds")
 # Indonesia ----
 indo_sau <- read_csv ("Data/SAU_landings/SAU EEZ indonesia.csv")
 
-indo_5spp <- indo_sau %>%
-  filter (year >= 2015) %>%
-  group_by (scientific_name) %>%
-  summarize (tot = sum (tonnes)) %>%
-  slice_max (tot, n = 9)
-# needed 7 in demonstration_cases to get identifiable species 
+#priority species from Indonesia team:
+indo_spp <- c("Lutjanus gibbus", "Lutjanus malabaricus", "Epinephelus coioides", "Epinephelus areolatus", "Rastrelliger kanagurta", "Rastrelliger brachysoma", "Decapterus russelli", "Decapterus macarellus", "Stolephorus", "Scylla serrata", "Thunnus albacares", "Portunus pelagicus")
+# D. macarellus and Stolephorus not in mcp data, but both have nutrition data
+
+# indo_5spp <- indo_sau %>%
+#   filter (year >= 2015) %>%
+#   group_by (scientific_name) %>%
+#   summarize (tot = sum (tonnes)) %>%
+#   slice_max (tot, n = 9)
+# # needed 7 in demonstration_cases to get identifiable species 
 
 # check that these are consistent with dbem
 mcp_indo <- mcp_nutr %>% filter (eez_name %in% c("Indonesia (Eastern)", "Indonesia (Central)"))
-indo_5spp$scientific_name[which (indo_5spp$scientific_name %in% mcp_indo$species)] # yes
+indo_spp[which (indo_spp %in% mcp_indo$species)] # yes
 
 
 
-plot_colorful_spp_nutr_dodge_bar(indo_5spp$scientific_name, Selenium = TRUE) +
+plot_colorful_spp_nutr_dodge_bar(indo_spp, Selenium = TRUE) +
   ggtitle ("Nutrient content of 100g portion for top species, Indonesia") +
   # scale_x_discrete(labels = c ()) +
   labs (y = "% Child RNI met")+
@@ -122,7 +126,15 @@ plot_colorful_spp_nutr_dodge_bar(indo_5spp$scientific_name, Selenium = TRUE) +
     legend.key.size = unit (3.5, "mm"),
     plot.title = element_text (size = 13),
     plot.margin=unit(c(1,1,1,1), 'mm'))
-ggsave ("Figures/Indonesia_top5_bar_nutr.png", width = 7, height = 4, units = "in")
+ggsave ("Figures/Indonesia_top_spp_bar_nutr.png", width = 14, height = 4, units = "in")
+
+# Table of RNi values
+spp_nutr %>%
+  filter (species %in% indo_spp) %>% 
+  select (species, nutrient, perc_rni) %>%
+  pivot_wider (names_from = nutrient, values_from = perc_rni) %>%
+  write.excel()
+
 
 # Ecuador ----
 
@@ -182,10 +194,10 @@ spp_nutr %>%
 # read compiled csv, collated in compile_MCP_data.R
 mcp_full <- read_csv("Data/mcp_full.csv")
 
-mcp_indo5 <- mcp_full %>%
-  filter (eez_name %in% c("Indonesia (Eastern)", "Indonesia (Central)"), species %in% indo_5spp$scientific_name)
+mcp_indo <- mcp_full %>%
+  filter (eez_name %in% c("Indonesia (Eastern)", "Indonesia (Central)"), species %in% indo_spp)
 
-indo5_perc_change <- mcp_indo5 %>%
+indo_perc_change <- mcp_indo %>%
   group_by (period, ssp, species) %>%
   summarise (mean_mcp = mean (mean_mcp)) %>%
   pivot_wider (names_from = period, values_from = mean_mcp) %>%
@@ -196,14 +208,31 @@ indo_sau_mean_catch <- indo_sau %>%
   filter (year >= 2015) %>%
   group_by (scientific_name) %>%
   summarize (mean_catch_sau = mean (tonnes)) %>%
-  rename (species = scientific_name)
+  rename (species = scientific_name) %>%
+  # For Lutjanus, use L. mbaricus and use E. areolatus for grouper
+  mutate (species = case_when (
+    species == "Lutjanus" ~ "Lutjanus malabaricus",
+    species == "Epinephelus" ~ "Epinephelus areolatus",
+    TRUE ~ species 
+  )) %>%
+  filter (species %in% indo_spp)
 
-indo5_sau_perc_change <- indo5_perc_change %>%
-  left_join (indo_sau_mean_catch, by = "species") %>%
+indo_sau_perc_change <- indo_perc_change %>%
+  # maintain addl indo sau spp
+  right_join (indo_sau_mean_catch, by = "species") %>%
   select (species, mean_catch_sau, ssp, perc_change) %>%
   pivot_wider (names_from = ssp, values_from = perc_change) %>%
   arrange (desc (mean_catch_sau)) %>%
   rename (perc_change_ssp126 = ssp126, perc_change_ssp585 = ssp585)
+
+
+# also look at perc change for stocks not in SAU
+indo_perc_change %>%
+  filter (species %in% indo_spp) %>%
+  select (species, ssp, perc_change) %>%
+  pivot_wider (names_from = ssp, values_from = perc_change) %>%
+  rename (perc_change_ssp126 = ssp126, perc_change_ssp585 = ssp585) %>%
+  write.excel()
 
 # ecuador
 # for mustelus, take average of other mustelus spp
@@ -297,16 +326,19 @@ ecu_5spp_rnis <- ecu5_sau_perc_change %>%
   unnest(cols = c(rni_equivalents),  names_repair = "check_unique") 
 
 
-indo_5spp_rnis <- indo5_sau_perc_change %>% 
+indo_spp_rnis <- indo_sau_perc_change %>% 
   mutate (rni_equivalents = map2 (species, mean_catch_sau, calc_children_fed_func)) %>%
   unnest(cols = c(rni_equivalents),  names_repair = "check_unique") 
 
+# table of nutrient yield
+indo_spp_rnis %>%
+  select (species, mean_catch_sau, nutrient, rni_equivalents, nutr_tonnes) %>% write.excel()
 
-indo_5spp_rnis %>%
+indo_spp_rnis %>%
   ggplot (aes (x = nutrient, y = rni_equivalents/1000000, fill = species)) +
   geom_col () +
   theme_bw() +
-  ggtitle ("Nutrient yield, top 5 species, Indonesia") +
+  ggtitle ("Nutrient yield, key species, Indonesia") +
   labs (x = "", y = "Child RNI equivalents, millions", fill = "Species") +
   theme (axis.text.y = element_text (size = 11),
          axis.text.x = element_text (size = 9),
@@ -314,7 +346,7 @@ indo_5spp_rnis %>%
          legend.text = element_text (size = 9),
          legend.title = element_text (size = 11),
          plot.title = element_text (size = 13))
-ggsave ("Figures/Indonesia_top5_nutr_yield.png", width = 7, height = 4, units = "in")
+ggsave ("Figures/Indonesia_top_nutr_yield.png", width = 7, height = 4, units = "in")
 
 # ecuador--use landings not MCP to preserve S. peruviana
 ecu_sau_mean_catch %>% 
@@ -353,7 +385,7 @@ ecu_5spp_rnis %>%
 # set order of species to match dodged bar nutrient density
 indo_spp_order <- c("R. brachysoma", "S. lemuru", "A. thazard", "S. leptolepis", "S. commerson")
 
-indo_tot_rnis_perc_change <- indo_5spp_rnis %>%
+indo_tot_rnis_perc_change <- indo_spp_rnis %>%
   group_by (species) %>%
   reframe (ssp126 = sum (rni_equivalents) * (1 + perc_change_ssp126/100),
            ssp585 = sum (rni_equivalents) * (1 + perc_change_ssp585/100)) %>%
@@ -367,7 +399,7 @@ indo_tot_rnis_perc_change <- indo_5spp_rnis %>%
   ) 
 
 
-indo_5spp_rnis %>%
+indo_spp_rnis %>%
   # shorten species names
   mutate (
     spp_short = ifelse (
@@ -382,7 +414,7 @@ indo_5spp_rnis %>%
   scale_shape_manual (values = c(19, 2)) +
   labs (x = "", y = "Child RNI equivalents, millions", fill = "Nutrient") +
   # unify species order with micronutrient density
-  scale_x_discrete (limits = indo_spp_order) +
+  #scale_x_discrete (limits = indo_spp_order) +
   scale_fill_brewer(palette = "Set1") +
   ggtitle ("Potential nutrient provisioning, top 5 species, Indonesia") +
   theme (axis.text.y = element_text (size = 11),
