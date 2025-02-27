@@ -139,19 +139,23 @@ spp_nutr %>%
 # Ecuador ----
 
 # From WWF team:
-ecu_spp <- c("Katsuwonus pelamis", "Opisthonema libertate", "Selene peruviana", "Chloroscombrus orqueta", "Prionace glauca", "Mustelus lunulatus")
+#ecu_spp <- c("Katsuwonus pelamis", "Opisthonema libertate", "Selene peruviana", "Chloroscombrus orqueta", "Prionace glauca", "Mustelus lunulatus")
 # M. lunulatus has no nutrition or MCP data. S. peruviana has nutr data but not MCP, so have to re-fetch
 # using average of other 4 Mustelus spp in DBEM Ecuador EEZ for M. lunulatus nutrition
+
+# new spp 2/27/25
+ecu_spp <- c("Katsuwonus pelamis", "Opisthonema libertate", "Centropomus viridis", "Cynoscion albus", "Chloroscombrus orqueta", "Prionace glauca", "Squatina armata")
+# C. viridis and C. albus no nutrition data. No MCP for viridis, albus, S. armata. No SAU for C. viridis, C. albus, S. armata
 
 # # galapagos and mainland from SAU
 ecu1 <- read_csv("Data/SAU_landings/SAU EEZ 218 v50-1.csv")
 ecu2 <- read_csv ("Data/SAU_landings/SAU EEZ 219 v50-1.csv")
 
-ecu_5spp <-  ecu1 %>%
-    rbind (ecu2) %>%
-    filter (year >= 2015, scientific_name %in% ecu_spp) %>%
-    group_by (scientific_name) %>%
-    summarize (tot = sum (tonnes))
+# ecu_5spp <-  ecu1 %>%
+#     rbind (ecu2) %>%
+#     filter (year >= 2015, scientific_name %in% ecu_spp) %>%
+#     group_by (scientific_name) %>%
+#     summarize (tot = sum (tonnes))
 # 
 # ecu_5spp <- ecu1 %>%
 #   rbind (ecu2) %>%
@@ -161,15 +165,15 @@ ecu_5spp <-  ecu1 %>%
 #   slice_max (tot, n = 7)
 
 
-# check that these are consistent with dbem
-mcp_ecu <- mcp_nutr %>% filter (eez_name == "Ecuador") # no galapagos?
-ecu_5spp$scientific_name[which (ecu_5spp$scientific_name %in% mcp_ecu$species)] # yes
-
-# M. lunulatus not in mcp, take other mustelus spp
-mcp_ecu %>% filter (grepl("Mustelus", species)) %>% select (species) %>% unique()
+# # check that these are consistent with dbem
+# mcp_ecu <- mcp_nutr %>% filter (eez_name == "Ecuador") # no galapagos?
+# ecu_5spp$scientific_name[which (ecu_5spp$scientific_name %in% mcp_ecu$species)] # yes
+# 
+# # M. lunulatus not in mcp, take other mustelus spp
+# mcp_ecu %>% filter (grepl("Mustelus", species)) %>% select (species) %>% unique()
 
 plot_colorful_spp_nutr_dodge_bar(ecu_spp, Selenium = TRUE) +
-  ggtitle ("Nutrient content of 100g portion for top species, Ecuador") +
+  ggtitle ("Nutrient content of 100g portion for key species, Ecuador") +
   labs (y = "% Child RNI met")+
   scale_fill_brewer(palette = "Set1") +
   theme ( 
@@ -235,15 +239,19 @@ indo_perc_change %>%
   write.excel()
 
 # ecuador
-# for mustelus, take average of other mustelus spp
-mcp_ecu5 <- mcp_full %>%
-  filter (eez_name == "Ecuador", species %in% ecu_5spp$scientific_name | grepl ("Mustelus", species) | grepl ("Selene", species)) %>%
+# # for mustelus, take average of other mustelus spp
+# mcp_ecu <- mcp_full %>%
+#   filter (eez_name == "Ecuador", species %in% ecu_spp$scientific_name | grepl ("Mustelus", species) | grepl ("Selene", species)) %>%
+#   # give all Mustelus spp. same name to combine
+#   mutate (species = ifelse (grepl ("Mustelus", species), "Mustelus spp.", species))
+
+# change S. squatina to S. armata. Take average of Cynoscion spp. 
+mcp_ecu <- mcp_full %>%
+  filter (eez_name == "Ecuador", species %in% ecu_spp | grepl ("Cynoscion", species) | grepl ("Squatina", species)) %>%
   # give all Mustelus spp. same name to combine
-  mutate (species = ifelse (grepl ("Mustelus", species), "Mustelus spp.", species))
+  mutate (species = ifelse (grepl ("Cynoscion", species), "Cynoscion albus", species))
 
-
-
-ecu5_perc_change <- mcp_ecu5 %>%
+ecu_perc_change <- mcp_ecu %>%
   group_by (period, ssp, species) %>%
   summarise (mean_mcp = mean (mean_mcp)) %>%
   pivot_wider (names_from = period, values_from = mean_mcp) %>%
@@ -259,7 +267,7 @@ ecu_sau_mean_catch <- ecu1 %>%
   summarize (mean_catch_sau = mean (tonnes, na.rm = TRUE)) %>%
   rename (species = scientific_name)
 
-ecu5_sau_perc_change <- ecu5_perc_change %>%
+ecu_sau_perc_change <- ecu_perc_change %>%
   left_join (ecu_sau_mean_catch, by = "species") %>%
   select (species, mean_catch_sau, ssp, perc_change) %>%
   pivot_wider (names_from = ssp, values_from = perc_change) %>%
@@ -319,7 +327,7 @@ calc_children_fed_func <- function (species_name, amount_mt) {
 }
 
 # ecuador--use landings not MCP to preserve S. peruviana
-ecu_5spp_rnis <- ecu5_sau_perc_change %>% 
+ecu_spp_rnis <- ecu_sau_perc_change %>% 
   # nutr data has m. lunulatus
   mutate (species = ifelse (species == "Mustelus spp.", "Mustelus lunulatus", species)) %>%
   mutate (rni_equivalents = map2 (species, mean_catch_sau, calc_children_fed_func)) %>%

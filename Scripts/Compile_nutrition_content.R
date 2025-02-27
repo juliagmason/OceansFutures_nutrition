@@ -90,10 +90,12 @@ fishnutr <- read_csv ("Data/Species_Nutrient_Predictions.csv") %>%
 # grab dbem fish species
 # also need Selene peruviana for ecuador case and Decapterus macarellus for indo case
 spp_nutr_fish <- fishnutr %>%
-  filter (species %in% spp_list$nutr_name | species == "Selene peruviana" |species == "Decapterus macarellus")
+  filter (species %in% spp_list$nutr_name | species == "Selene peruviana" |species == "Decapterus macarellus" | species == "Squatina armata")
 
 # for ecuador case, take avg nutrition for Mustelus spp in ecuador
-# doing this post hoc with mcp_full, which would need to bring back in if running fresh
+# read compiled csv, collated in compile_MCP_data.R
+mcp_full <- read_csv("Data/mcp_full.csv")
+
 ecu_mustelus <- mcp_full %>%
   filter (eez_name =="Ecuador", grepl ("Mustelus", species)) %>% select (species) %>% unique()
 
@@ -104,6 +106,29 @@ ecu_mustelus_nutr <- fishnutr %>%
   mutate (species = "Mustelus lunulatus") %>%
   # reorder
   select (species, nutrient, amount)
+
+# try cynoscion
+ecu_cyno <- mcp_full %>%
+  filter (eez_name =="Ecuador", grepl ("Cynoscion", species)) %>% select (species) %>% unique()
+# 2 spp, C. analis and C. nebulosus
+
+ecu_cyno_nutr <- fishnutr %>%
+  filter (species %in% ecu_cyno$species) %>% # does have all 4 from dbem
+  group_by (nutrient) %>%
+  summarise (amount = mean (amount, na.rm = TRUE)) %>% 
+  mutate (species = "Cynoscion albus") %>%
+  # reorder
+  select (species, nutrient, amount)
+
+# try cynoscion
+ecu_centropomus <- mcp_full %>%
+  filter (eez_name =="Ecuador", grepl ("Centropomus", species)) %>% select (species) %>% unique()
+# None; might be bc mcp doesn't include Galapagos
+
+ecu_squatina <- mcp_full %>%
+  filter (eez_name =="Ecuador", grepl ("Squatina", species)) %>% select (species) %>% unique()
+# Squatina squatina. won't change; just noting for  climate data. but do therefore need S. armata in nutr data
+
 
 # for Indonesia case, add Decapterus macarellus and avg of Stolephorus. From early demonstration_cases work, looked up that all 8 Stolephorus spp in fishnutr occur in indonesia
 indo_stolephorus_nutr <- fishnutr %>%
@@ -117,6 +142,7 @@ indo_stolephorus_nutr <- fishnutr %>%
 # compile additional case study spp  
 spp_nutr_fish <- spp_nutr_fish %>%
   rbind (ecu_mustelus_nutr) %>%
+  rbind (ecu_cyno_nutr) %>%
   rbind (indo_stolephorus_nutr) 
 
 # look at missing--are there any fish?
